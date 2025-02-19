@@ -1,0 +1,60 @@
+---
+title: "Spotify Music Analysis"
+author: "Shammah"
+date: "2025-02-18"
+output: html_document
+---
+
+- using dataset from [leonardopena/top-spotify-songs-from-20102019-by-year](https://www.kaggle.com/datasets/leonardopena/top-spotify-songs-from-20102019-by-year)
+
+- Description of headings [playlistmachinery](http://organizeyourmusic.playlistmachinery.com/#)
+
+
+1. **Genre** - the genre of the track
+2. **Year** - the release year of the recording. Note that due to vagaries of releases, re-releases, re-issues and general madness, sometimes the release years are not what you'd expect.
+3. **Added** - the earliest date you added the track to your collection.
+4. **Beats** Per Minute (BPM) - The tempo of the song.
+5. **Energy** - The energy of a song - the higher the value, the more energtic. song
+6. **Danceability** - The higher the value, the easier it is to dance to this song.
+7. **Loudness (dB)** - The higher the value, the louder the song.
+8. **Liveness** - The higher the value, the more likely the song is a live recording.
+9. **Valence** - The higher the value, the more positive mood for the song.
+10. **Length** - The duration of the song.
+11. **Acousticness** - The higher the value the more acoustic the song is.
+12. **Speechiness** - The higher the value the more spoken word the song contains.
+14. **Popularity** - The higher the value the more popular the song is.
+15. **Duration** - The length of the song. 
+
+```{r}
+library(data.table)
+
+url <- "./data/top10s.csv"
+data <- fread(input = url, header = TRUE)
+head(data)
+```
+```{r}
+str(data)
+```
+```{r}
+summary(data)
+```
+```{r}
+colnames(data)
+```
+```{r}
+song_genre_df <- data.frame(data[ ,c("title", "top genre")])
+head(song_genre_df)
+```
+```{r}
+genre_vector <- c(song_genre_df[ , "top.genre"])
+#genre_vector
+#genre_factor <- as.factor(genre_vector)
+#str(genre_factor)
+genre_freq_table <- data.frame(table(data$`top genre`))
+head(genre_freq_table)
+```
+```{r}
+sorted_by_genre_freq <- genre_freq_table[order(genre_freq_table$Freq, decreasing = TRUE), ]
+head(sorted_by_genre_freq)
+```
+
