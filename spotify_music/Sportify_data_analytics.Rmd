@@ -5,9 +5,14 @@ date: "2025-02-18"
 output: html_document
 ---
 
-- using dataset from [leonardopena/top-spotify-songs-from-20102019-by-year](https://www.kaggle.com/datasets/leonardopena/top-spotify-songs-from-20102019-by-year)
+## Introduction
+The main goal of this analysis is to figure out what factors contribute to the
+popularity of a song from multiple variables. Songs in this data set were popular
+enough to be featured on the billboard top 100 songs list at different times. 
 
-- Description of headings [playlistmachinery](http://organizeyourmusic.playlistmachinery.com/#)
+We are using dataset from [leonardopena/top-spotify-songs-from-20102019-by-year](https://www.kaggle.com/datasets/leonardopena/top-spotify-songs-from-20102019-by-year)
+
+### Description of Columns [playlistmachinery](http://organizeyourmusic.playlistmachinery.com/#)
 
 
 1. **Genre** - the genre of the track
@@ -25,36 +30,159 @@ output: html_document
 14. **Popularity** - The higher the value the more popular the song is.
 15. **Duration** - The length of the song. 
 
+### Exploring the Data
 ```{r}
 library(data.table)
 
 url <- "./data/top10s.csv"
-data <- fread(input = url, header = TRUE)
+data <- as.data.frame(fread(input = url, header = TRUE))
+colnames(data)[colnames(data) == "top genre"] <- "genre"
 head(data)
+tail(data)
 ```
+Song rankings in the data set are based on the Popularity (pop column). We will be
+evaluating all other variables in relation to the Popularity.
 ```{r}
 str(data)
 ```
+The dataset contains 15 variables of which 9 of them are more relevant for this analysis.
+The 9 relevant variables are based on song characteristics like bpm, genre and loudness.
 ```{r}
 summary(data)
 ```
+This dataset does not have missing values.
 ```{r}
 colnames(data)
 ```
+
+#### Checking for Posible Groups
 ```{r}
-song_genre_df <- data.frame(data[ ,c("title", "top genre")])
-head(song_genre_df)
-```
-```{r}
-genre_vector <- c(song_genre_df[ , "top.genre"])
-#genre_vector
-#genre_factor <- as.factor(genre_vector)
-#str(genre_factor)
-genre_freq_table <- data.frame(table(data$`top genre`))
-head(genre_freq_table)
-```
-```{r}
-sorted_by_genre_freq <- genre_freq_table[order(genre_freq_table$Freq, decreasing = TRUE), ]
-head(sorted_by_genre_freq)
+genre_vector <- c(data$genre)
+genre_factor <- as.factor(genre_vector)
+str(genre_factor)
 ```
 
+Genre is typically a good variable to classify music on. In this dataset however,
+we have 50 genres which can be a bit challenging to work with. We will create a 
+frequency table for the genre to figure out if there are enough data points to group
+our songs by.
+
+```{r}
+genre_freq_table <- data.frame(table(data$genre))
+head(genre_freq_table)
+```
+
+
+```{r}
+sorted_by_genre_freq <- genre_freq_table[order(genre_freq_table$Freq, decreasing = TRUE), ]
+head(sorted_by_genre_freq, n=10)
+```
+Sorting the genre frequency table shows a clear distinction among different genres.
+Based on the frequency of a genre, we can determine which genre is more likely to
+rank high enough to be included in the bill board top 100.
+
+### Investigating Correlation Genre/Populatiry
+Now that we know some genres have higher frequency on the bill board top 100 with 
+dance pop songs showing up **327** times, we will investigate if the genre has any impact on popularity.
+
+We will use the **Shapiro Wilk** test to determine if the popularity if normally distributed
+If we have normal distribution, we can use the **ANOVA test** (Analysis of Variances)
+otherwise we will use the **Kruskal-Wallis test**
+
+**ANOVA test** is used on normal distribution to check for significant differences 
+between the means of two or more independent variables, in this case *genre* and *pop*.
+
+**Kruskal-Wallis test** is a non-parametric alternative to ANOVA test used to compare the
+medias of those same variables.
+
+A *p-value* < 0.05 on the Shapiro-Wilk test means the data is not in a normal distribution
+hence the Krustal-Wallis test is recommended.
+
+The *p-value* from Kruskal-Wallis* is < 0.05 indicating at least one genre has
+significantly popularity which the specific genre comparisons can be done using 
+**Dunn's post-hoc test** which we can look at as an addition to the current scope of this analysis.
+
+We will add a *Spearman test* to get a correlation value. *P-value* < 0.05 shows significant correlation
+*rho*>0 shows a positive correlation between the genre and popularity.
+```{r}
+data$genre_numeric <- as.integer(factor(data$genre))
+head(data)
+shapiro.test(data$pop)
+kruskal.test(pop ~ genre, data = data)
+cor.test(data$pop, data$genre_numeric, method = "spearman")
+```
+
+### Visualization
+```{r}
+suppressPackageStartupMessages(library(ggcorrplot))
+
+m <- cor(data[,c(6:16) ])
+
+ggcorrplot(m, lab = TRUE, lab_size = 2,ggtheme = ggplot2::theme_minimal(), 
+           method = "square", colors = c("blue", "white", "red"))
+```
+```{r}
+suppressPackageStartupMessages(library(dplyr))
+library(ggplot2)
+
+dance_pop_data <- data %>% 
+  filter(genre == "dance pop")
+
+head(dance_pop_data)
+
+ggplot(dance_pop_data, aes(x = as.factor(year))) +
+  geom_bar(fill = "skyblue") +
+  labs(title = "Count of Dance Pop Genre by Year", x = "Year", y = "Count of Occurrences") +
+  theme_minimal()
+```
+```{r}
+genre_year_count <- data %>%
+  group_by(year, genre) %>%
+  summarise(count = n(), .groups = 'keep')
+
+head(genre_year_count)
+options(repr.plot.width = 18, repr.plot.height = 8)
+
+
+last_data_points <- genre_year_count %>%
+  group_by(genre) %>%
+  slice_max(year, n = 1)
+
+ggplot(genre_year_count, aes(x = year, y = count, color = genre, group = genre)) +
+  geom_line() +
+  geom_smooth(method = "lm", se = FALSE, aes(color = genre),linewidth = 0.5, linetype = "dashed") +
+  geom_text(data = last_data_points,
+            aes(label = genre), 
+            hjust = -0.1,  
+            vjust = 0.5,
+            check_overlap = TRUE)+
+  labs(title = "Count of Genres by Year", x = "Year", y = "Count of Occurrences") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        legend.justification = "center")
+
+ggplot(genre_year_count, aes(x = year, y = count, color = genre, group = genre)) +
+  geom_line() +
+  labs(title = "Count of Genres by Year", x = "Year", y = "Count of Occurrences") +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank())
+```
+
+### Conclusion
+Factors that have an impact on the popularity or a positive correlation are danceability,
+loudness and genre. This analysis mainly focused on the genre which is usually more within
+an artist's control. 
+
+Dance Pop was the most popular genre from 2010 through 2018 before the popularity goes down
+towards 2019. The sharp decline in Dance Pop songs on the bill board 100 list represents a 
+large change in interest in the music market and we would not recommend new artists to jump
+into that genre.
+
+Pop music is trending upwards and would be a good recommendation for an artist looking to 
+jump on to a positive trend. A few of the genres with smaller frequencies on the bill boards list
+are also trending upwards. It would be worth while to investigate which particular artists are 
+trending and how they are reaching their audiences to create a shift in the music market.
